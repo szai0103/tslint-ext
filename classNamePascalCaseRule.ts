@@ -1,82 +1,54 @@
-/**
- * @license
- * Copyright 2013 Palantir Technologies, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+import * as Lint from "tslint"
+import * as ts from "typescript"
+import * as tsutils from "tsutils"
 
-import { isClassLikeDeclaration, isInterfaceDeclaration } from "tsutils";
-import * as ts from "typescript";
-import * as Lint from "tslint";
-import {isUpperCase} from "tslint/lib/utils";
+function isUpperCase(str) {
+    return str === str.toUpperCase();
+}
 
-const codeExamples = [
-    {
-        description: "Enforces PascalCased class and interface names.",
-        config: Lint.Utils.dedent`
-            "rules": { "class-name": true }
-        `,
-        pass: Lint.Utils.dedent`
-            class MyClass { }
-            interface MyInterface { }
-        `,
-        fail: Lint.Utils.dedent`
-            class myClass { }
-            interface myInterface { }
-       `,
-    },
-];
+// checks if the passed name is PascalCased
+function isPascalCased(name) {
+    return isUpperCase(name[0]) && !name.includes("_") && !name.includes("-");
+}
 
+// A class name with Rule must be exported by Rule files, and it must extend `Lint.Rules.AbstractRule`. 
 export class Rule extends Lint.Rules.AbstractRule {
-    /* tslint:disable:object-literal-sort-keys */
+
+    // This provides configuration and information about what the Rule does and the settings to expect.
     public static metadata: Lint.IRuleMetadata = {
-        ruleName: "class-name",
+
+        // The name of the Rule in kebab-case, this is what users will provided in tslint.json at the "rules" section to add this Rule to the project.
+        ruleName: "class-name-pascal-case",
+
+        // Describes what the Rule does.
         description: "Enforces PascalCased class and interface names.",
-        rationale: Lint.Utils.dedent`
-            Makes it easy to differentiate classes from regular variables at a glance.
-            JavaScript and general programming convention is to refer to classes in PascalCase.
-            It's confusing to use camelCase or other conventions for class names.
-        `,
         optionsDescription: "Not configurable.",
         options: null,
-        optionExamples: [true],
         type: "style",
-        typescriptOnly: false,
-        codeExamples,
-    };
-    /* tslint:enable:object-literal-sort-keys */
+        typescriptOnly: false
+    }
 
+    // This provides the text description to be displayed when the lint Rule is failed by the class.
     public static FAILURE_STRING = "Class name must be in pascal case";
 
+    // This is the method every Rule must implement.
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
-        return this.applyWithFunction(sourceFile, walk);
+        return this.applyWithWalker(new ClassNamePascalCaseWalker(sourceFile, Rule.metadata.ruleName, void this.getOptions()))
     }
 }
 
-function walk(ctx: Lint.WalkContext) {
-    return ts.forEachChild(ctx.sourceFile, function cb(node: ts.Node): void {
-        if (
-            (isClassLikeDeclaration(node) && node.name !== undefined) ||
-            isInterfaceDeclaration(node)
-        ) {
-            if (!isPascalCased(node.name!.text)) {
-                ctx.addFailureAtNode(node.name!, Rule.FAILURE_STRING);
+class ClassNamePascalCaseWalker extends Lint.AbstractWalker {
+    public walk(sourceFile: ts.SourceFile) {
+        const cb = (node: ts.Node): void => {
+            if ((tsutils.isClassLikeDeclaration(node) && node.name !== undefined) ||
+                tsutils.isInterfaceDeclaration(node)) {
+                if (!isPascalCased(node.name.text)) {
+                    this.addFailureAtNode(node.name, Rule.FAILURE_STRING);
+                }
             }
+            return ts.forEachChild(node, cb);
         }
-        return ts.forEachChild(node, cb);
-    });
-}
 
-function isPascalCased(name: string): boolean {
-    return isUpperCase(name[0]) && !name.includes("_") && !name.includes("-");
+        return ts.forEachChild(sourceFile, cb);
+    }
 }
